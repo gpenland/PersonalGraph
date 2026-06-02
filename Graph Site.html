@@ -1,0 +1,1608 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>Grayson Penland — Graph</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      :root {
+        --font: "Hanken Grotesk", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+
+      .app {
+        position: fixed;
+        inset: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        transition: background 0.4s ease, color 0.4s ease;
+      }
+
+      /* ── themes ── */
+      .theme-dark {
+        --bg: oklch(0.17 0.006 60);
+        --bg2: oklch(0.115 0.006 60);
+        --text: oklch(0.93 0.01 75);
+        --muted: oklch(0.62 0.012 70);
+        --line: oklch(0.34 0.012 60);
+        --panel-bg: oklch(0.205 0.007 60 / 0.86);
+        --panel-solid: oklch(0.205 0.007 60);
+        --chip-bg: oklch(0.255 0.009 60);
+        --chip-bd: oklch(0.34 0.012 60);
+        --label-shadow: 0 1px 4px rgb(0 0 0 / 0.55);
+      }
+      .theme-light {
+        --bg: oklch(0.965 0.006 85);
+        --bg2: oklch(0.9 0.01 85);
+        --text: oklch(0.27 0.012 60);
+        --muted: oklch(0.5 0.012 60);
+        --line: oklch(0.78 0.012 75);
+        --panel-bg: oklch(0.995 0.004 85 / 0.9);
+        --panel-solid: oklch(0.99 0.004 85);
+        --chip-bg: oklch(0.91 0.01 85);
+        --chip-bd: oklch(0.82 0.012 80);
+        --label-shadow: 0 1px 3px rgb(255 255 255 / 0.7);
+      }
+
+      .graph-wrap {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(120% 120% at 50% 42%, var(--bg) 30%, var(--bg2) 100%);
+        touch-action: none;
+      }
+      .graph-svg { display: block; }
+
+      /* ── links ── */
+      .link {
+        stroke: var(--line);
+        stroke-width: 1.1;
+        opacity: var(--link-op);
+        transition: opacity 0.25s ease, stroke 0.25s ease, stroke-width 0.2s ease;
+      }
+      .link-cross { stroke-dasharray: 2 5; opacity: calc(var(--link-op) * 0.65); }
+      .link-on { stroke-width: 1.8; opacity: 0.95 !important; stroke-dasharray: none; }
+      .link-dim { opacity: calc(var(--link-op) * 0.1) !important; }
+
+      /* ── nodes ── */
+      .node-dot {
+        transition: r 0.16s cubic-bezier(0.34, 1.4, 0.5, 1), opacity 0.25s ease, filter 0.2s ease;
+      }
+      .node-g.dim .node-dot { opacity: 0.16; }
+      .node-g.dim { transition: opacity 0.25s; }
+      .skin-obsidian .node-dot.t-center { filter: drop-shadow(0 0 11px var(--glow)); }
+      .skin-obsidian .node-dot.t-hub { filter: drop-shadow(0 0 7px var(--glow)); }
+      .skin-obsidian .node-dot.on { filter: drop-shadow(0 0 15px var(--glow)); }
+      .halo, .sel-ring, .node-label { pointer-events: none; }
+      .sel-ring { fill: none; stroke-width: 1.5; opacity: 0.7; }
+
+      .node-label {
+        fill: var(--text);
+        font-family: var(--font);
+        text-shadow: var(--label-shadow);
+        transition: opacity 0.25s ease;
+      }
+      .l-center { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+      .l-hub { font-size: 13px; font-weight: 560; }
+      .l-leaf { font-size: 11.5px; font-weight: 480; }
+
+      /* ── top bar ── */
+      .topbar {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 22px;
+        z-index: 20;
+        pointer-events: none;
+      }
+      .brand { display: flex; align-items: center; gap: 9px; pointer-events: auto; }
+      .brand-glyph line { stroke: var(--muted); stroke-width: 1.3; }
+      .brand-glyph circle { fill: var(--muted); }
+      .brand-glyph .bg-c { fill: var(--accent); }
+      .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+      .brand-name .dim { color: var(--muted); font-weight: 500; }
+
+      .seg {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--chip-bd);
+        background: var(--panel-bg);
+        backdrop-filter: blur(10px);
+        border-radius: 999px;
+        pointer-events: auto;
+      }
+      .seg-label {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        padding: 0 6px 0 8px;
+      }
+      .seg-btn {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        background: transparent;
+        border: 0;
+        padding: 5px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: color 0.2s, background 0.2s;
+      }
+      .seg-btn:hover { color: var(--text); }
+      .seg-btn.on {
+        color: var(--bg);
+        background: var(--accent);
+        font-weight: 500;
+      }
+      .theme-light .seg-btn.on { color: #fff; }
+
+      /* ── status bar ── */
+      .statusbar {
+        position: absolute;
+        left: 22px;
+        bottom: 16px;
+        z-index: 20;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .statusbar .sep { opacity: 0.5; }
+
+      /* ── side panel ── */
+      .panel {
+        position: absolute;
+        top: 0; right: 0; bottom: 0;
+        width: 384px;
+        max-width: 92vw;
+        background: var(--panel-bg);
+        backdrop-filter: blur(16px);
+        border-left: 1px solid var(--line);
+        transform: translate(101%, 0);
+        transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+        z-index: 30;
+        overflow: hidden;
+      }
+      .panel.open { box-shadow: -24px 0 60px -30px rgb(0 0 0 / 0.6); }
+      .panel-inner {
+        height: 100%;
+        overflow-y: auto;
+        padding: 30px 30px 48px;
+        animation: fadeUp 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .panel-close {
+        position: absolute;
+        top: 18px; right: 18px;
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        border: 1px solid var(--chip-bd);
+        background: var(--chip-bg);
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1;
+        cursor: pointer;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      .panel-close:hover { color: var(--text); border-color: var(--muted); }
+      .panel-eyebrow {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        margin-bottom: 10px;
+      }
+      .panel-title {
+        font-size: 25px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.12;
+        margin: 0 0 6px;
+        text-wrap: pretty;
+        padding-right: 26px;
+      }
+      .panel-sub { font-size: 14px; color: var(--muted); font-weight: 500; line-height: 1.4; }
+      .panel-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+      .meta-chip {
+        font-family: var(--mono);
+        font-size: 11px;
+        white-space: nowrap;
+        color: var(--muted);
+        background: var(--chip-bg);
+        border: 1px solid var(--chip-bd);
+        padding: 3px 9px;
+        border-radius: 6px;
+      }
+      .panel-body {
+        font-size: 14.5px;
+        line-height: 1.62;
+        color: var(--text);
+        margin: 18px 0 0;
+        text-wrap: pretty;
+      }
+      .panel-bullets {
+        margin: 14px 0 0;
+        padding-left: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .panel-bullets li {
+        position: relative;
+        padding-left: 18px;
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: var(--text);
+        text-wrap: pretty;
+      }
+      .panel-bullets li::before {
+        content: "";
+        position: absolute;
+        left: 2px; top: 8px;
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .panel-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 20px; }
+      .tag {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
+        background: var(--chip-bg);
+        padding: 4px 10px;
+        border-radius: 999px;
+      }
+      .panel-links { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+      .panel-link {
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+      }
+      .panel-link .arr { font-size: 12px; opacity: 0.7; }
+      .panel-link:hover { text-decoration: underline; }
+
+      .linked { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 20px; }
+      .linked-head {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .linked-list { display: flex; flex-wrap: wrap; gap: 8px; }
+      .linked-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        font-family: var(--font);
+        font-size: 13px;
+        color: var(--text);
+        background: var(--chip-bg);
+        border: 1px solid var(--chip-bd);
+        padding: 6px 12px 6px 10px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: border-color 0.2s, transform 0.15s;
+      }
+      .linked-chip:hover { border-color: var(--muted); transform: translateY(-1px); }
+      .linked-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+      @media (max-width: 720px) {
+        .panel {
+          top: auto; left: 0; right: 0; bottom: 0;
+          width: 100%; max-width: 100%;
+          height: 68vh;
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          border-radius: 18px 18px 0 0;
+          transform: translate(0, 101%);
+        }
+        .panel.open { box-shadow: 0 -24px 60px -30px rgb(0 0 0 / 0.6); }
+        .panel-inner { padding: 26px 22px 40px; }
+        .topbar { padding: 14px 16px; }
+        .statusbar { left: 16px; bottom: 12px; }
+        .brand-name { font-size: 13px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+    <!-- graph-data.js -->
+    <script>
+/* Graph data for Grayson Penland's personal site. */
+window.GRAPH = (function () {
+  const nodes = [
+    {
+      id: "me",
+      label: "Grayson Penland",
+      type: "center",
+      group: "core",
+      panel: {
+        eyebrow: "home",
+        title: "Grayson Penland",
+        subtitle: "CS @ Georgia Tech · GTM Intern @ Sevalla",
+        meta: ["Atlanta, GA"],
+        body:
+          "Computer science student with a builder's background in IT, web, and open source. " +
+          "I like systems that connect — graphs, infrastructure, and the people around them. " +
+          "Click any node to wander through the things I've worked on.",
+        tags: ["Java", "Python", "Linux", "Open Source", "Go-to-Market"],
+        links: [
+          { label: "Email", href: "mailto:gpenland06@gmail.com" },
+          { label: "LinkedIn", href: "https://linkedin.com/in/gpenland" },
+        ],
+      },
+    },
+
+    // ── Hubs ────────────────────────────────────────────────
+    {
+      id: "about",
+      label: "About",
+      type: "hub",
+      group: "about",
+      panel: {
+        eyebrow: "note",
+        title: "About",
+        subtitle: "A short version",
+        body:
+          "I'm a second-year CS student at Georgia Tech who got here the long way — " +
+          "fixing PCs and shipping websites for small businesses before the degree. " +
+          "These days I split time between data-structures coursework, a GTM internship " +
+          "at Sevalla, and teaching kids to swim. I care about open source, clean systems, " +
+          "and explaining hard things simply.",
+        tags: ["Builder", "Open source", "Teacher"],
+      },
+    },
+    {
+      id: "edu",
+      label: "Education",
+      type: "hub",
+      group: "edu",
+      panel: {
+        eyebrow: "section",
+        title: "Education",
+        body: "Where the formal CS foundation comes from.",
+      },
+    },
+    {
+      id: "exp",
+      label: "Experience",
+      type: "hub",
+      group: "exp",
+      panel: {
+        eyebrow: "section",
+        title: "Experience",
+        body: "Roles across go-to-market, IT, web, and aquatics.",
+      },
+    },
+    {
+      id: "proj",
+      label: "Projects",
+      type: "hub",
+      group: "proj",
+      panel: {
+        eyebrow: "section",
+        title: "Projects",
+        body: "Things I built or produced end-to-end.",
+      },
+    },
+    {
+      id: "skills",
+      label: "Skills",
+      type: "hub",
+      group: "skills",
+      panel: {
+        eyebrow: "section",
+        title: "Skills",
+        body: "The toolkit, clustered by kind.",
+      },
+    },
+    {
+      id: "contact",
+      label: "Contact",
+      type: "hub",
+      group: "contact",
+      panel: {
+        eyebrow: "section",
+        title: "Contact",
+        subtitle: "Atlanta, GA",
+        links: [
+          { label: "gpenland06@gmail.com", href: "mailto:gpenland06@gmail.com" },
+          { label: "linkedin.com/in/gpenland", href: "https://linkedin.com/in/gpenland" },
+        ],
+      },
+    },
+
+    // ── Education leaves ────────────────────────────────────
+    {
+      id: "gt",
+      label: "Georgia Tech",
+      type: "leaf",
+      group: "edu",
+      panel: {
+        eyebrow: "education",
+        title: "Georgia Institute of Technology",
+        subtitle: "B.S. Computer Science",
+        meta: ["Atlanta, GA", "Jun 2025 – Present", "Expected: Fall 2028"],
+        body: "Relevant coursework:",
+        bullets: [
+          "Object-Oriented Programming",
+          "Data Structures & Algorithms",
+          "Discrete Mathematics",
+        ],
+        tags: ["CS1332", "OOP", "Discrete Math"],
+      },
+    },
+
+    // ── Experience leaves ───────────────────────────────────
+    {
+      id: "sevalla",
+      label: "Sevalla",
+      type: "leaf",
+      group: "exp",
+      panel: {
+        eyebrow: "experience",
+        title: "GTM Intern",
+        subtitle: "Sevalla",
+        meta: ["Present"],
+        body:
+          "Go-to-market internship at Sevalla, working at the intersection of " +
+          "developer infrastructure and growth.",
+        tags: ["Go-to-Market", "Developer tooling", "Growth"],
+      },
+    },
+    {
+      id: "siervo",
+      label: "Siervocomp",
+      type: "leaf",
+      group: "exp",
+      panel: {
+        eyebrow: "experience",
+        title: "IT Field Technician & Web Developer",
+        subtitle: "Siervocomp Computer Repairs & IT Solutions · Toccoa, GA",
+        meta: ["Jun 2023 – Jan 2025"],
+        body: "Produced solutions and provided technical support for local businesses.",
+        bullets: [
+          "Managed client communications & scheduling; delivered on-site service autonomously",
+          "Wrote SOPs and user guides that reduced repeat issues",
+          "Migrated host and optimized SEO for a 200-page site → ~4,000 monthly views",
+          "Built & serviced 50+ PCs; diagnosed hardware / OS / network issues",
+        ],
+        tags: ["IT support", "Web dev", "SEO"],
+      },
+    },
+    {
+      id: "guard",
+      label: "Lifeguard",
+      type: "leaf",
+      group: "exp",
+      panel: {
+        eyebrow: "experience",
+        title: "Lifeguard & Swim Instructor",
+        subtitle: "Georgia Tech / Tallulah Falls School",
+        meta: ["Jun 2023 – Present"],
+        body: "Maintaining pool safety while teaching the next generation to swim.",
+        bullets: [
+          "Prevented drowning and injuries while assisting patrons",
+          "Taught structured swim lessons for children ages 5–11",
+        ],
+        tags: ["Safety", "Teaching"],
+      },
+    },
+
+    // ── Project leaves ──────────────────────────────────────
+    {
+      id: "cityeng",
+      label: "City Infrastructure Engine",
+      type: "leaf",
+      group: "proj",
+      panel: {
+        eyebrow: "project · Java",
+        title: "Graphs & City Infrastructure Engine",
+        subtitle: "CS1332 · Georgia Tech",
+        meta: ["Apr 2026"],
+        body: "A from-scratch graph engine modeling a city's road and electrical-grid networks.",
+        bullets: [
+          "Undirected weighted graph on an adjacency-list HashMap; union-find with path compression & union-by-rank for O(1) connected-component queries",
+          "Implemented BFS, DFS, Dijkstra's, Prim's & Kruskal's from scratch into a city-services API",
+          "Shortest-path routing, MST-based wire consolidation, and centrality queries for optimal power-station siting within O(|R| log |R|)",
+          "Modified Dijkstra's that lexicographically minimizes (restricted-intersection count, total duration) to route trucks around non-preferred intersections",
+        ],
+        tags: ["Java", "Graphs", "Algorithms"],
+      },
+    },
+    {
+      id: "fedora",
+      label: "Fedora Podcast",
+      type: "leaf",
+      group: "proj",
+      panel: {
+        eyebrow: "project",
+        title: "Volunteer Podcast Host & Producer",
+        subtitle: "The Fedora Project",
+        meta: ["Jan 2021 – Dec 2021"],
+        body: "Hosted and produced a podcast on Linux, operating systems, and open-source ecosystems.",
+        bullets: [
+          "Interviewed developers & contributors on advanced OS / open-source topics",
+          "Ran end-to-end production: scheduling, recording, editing, publishing",
+          "10,000+ downloads in under 8 months",
+          "Negotiated a partnership between a podcast network and the Fedora Project for long-term reach",
+          "Coordinated remote collaboration with open-source tooling (incl. Git)",
+        ],
+        tags: ["Open Source", "Linux", "Production"],
+      },
+    },
+
+    // ── Skills leaves ───────────────────────────────────────
+    {
+      id: "lang",
+      label: "Languages",
+      type: "leaf",
+      group: "skills",
+      panel: {
+        eyebrow: "skills",
+        title: "Languages",
+        bullets: ["Java", "Python", "Bash", "HTML / CSS", "SQL", "PHP"],
+        tags: ["Java", "Python", "SQL"],
+      },
+    },
+    {
+      id: "tools",
+      label: "Developer Tools",
+      type: "leaf",
+      group: "skills",
+      panel: {
+        eyebrow: "skills",
+        title: "Developer Tools",
+        bullets: ["Git", "Docker", "Ansible", "Linux"],
+        tags: ["Git", "Docker", "Ansible"],
+      },
+    },
+    {
+      id: "infra",
+      label: "IT & Infrastructure",
+      type: "leaf",
+      group: "skills",
+      panel: {
+        eyebrow: "skills",
+        title: "IT & Infrastructure",
+        bullets: [
+          "Networking fundamentals",
+          "Hardware diagnostics",
+          "System troubleshooting",
+          "Technical documentation",
+        ],
+        tags: ["Networking", "Hardware", "Docs"],
+      },
+    },
+
+    // ── Contact leaves ──────────────────────────────────────
+    {
+      id: "linkedin",
+      label: "LinkedIn",
+      type: "leaf",
+      group: "contact",
+      panel: {
+        eyebrow: "contact",
+        title: "LinkedIn",
+        body: "Let's connect.",
+        links: [{ label: "linkedin.com/in/gpenland", href: "https://linkedin.com/in/gpenland" }],
+      },
+    },
+    {
+      id: "email",
+      label: "Email",
+      type: "leaf",
+      group: "contact",
+      panel: {
+        eyebrow: "contact",
+        title: "Email",
+        body: "Fastest way to reach me.",
+        links: [{ label: "gpenland06@gmail.com", href: "mailto:gpenland06@gmail.com" }],
+      },
+    },
+    {
+      id: "phone",
+      label: "Phone",
+      type: "leaf",
+      group: "contact",
+      panel: {
+        eyebrow: "contact",
+        title: "Phone",
+      },
+    },
+  ];
+
+  const links = [
+    // tree: center → hubs
+    ["me", "about", "tree"],
+    ["me", "edu", "tree"],
+    ["me", "exp", "tree"],
+    ["me", "proj", "tree"],
+    ["me", "skills", "tree"],
+    ["me", "contact", "tree"],
+    // hubs → leaves
+    ["edu", "gt", "tree"],
+    ["exp", "sevalla", "tree"],
+    ["exp", "siervo", "tree"],
+    ["exp", "guard", "tree"],
+    ["proj", "cityeng", "tree"],
+    ["proj", "fedora", "tree"],
+    ["skills", "lang", "tree"],
+    ["skills", "tools", "tree"],
+    ["skills", "infra", "tree"],
+    ["contact", "linkedin", "tree"],
+    ["contact", "email", "tree"],
+    ["contact", "phone", "tree"],
+    // cross: second-brain associations
+    ["cityeng", "gt", "cross"],
+    ["cityeng", "lang", "cross"],
+    ["cityeng", "tools", "cross"],
+    ["fedora", "tools", "cross"],
+    ["fedora", "infra", "cross"],
+    ["siervo", "infra", "cross"],
+    ["siervo", "lang", "cross"],
+    ["siervo", "tools", "cross"],
+    ["gt", "lang", "cross"],
+    ["sevalla", "infra", "cross"],
+    ["about", "gt", "cross"],
+  ];
+
+  const adj = {};
+  nodes.forEach((n) => (adj[n.id] = new Set()));
+  links.forEach(([a, b]) => {
+    adj[a].add(b);
+    adj[b].add(a);
+  });
+  const degree = {};
+  nodes.forEach((n) => (degree[n.id] = adj[n.id].size));
+
+  return { nodes, links, adj, degree };
+})();
+    </script>
+
+    <!-- physics.js -->
+    <script>
+(function () {
+  function rand(a, b) {
+    return a + Math.random() * (b - a);
+  }
+
+  class Sim {
+    constructor(data, opts) {
+      this.data = data;
+      this.opts = Object.assign(
+        {
+          repulsion: 9500,
+          springTree: 0.045,
+          springCross: 0.016,
+          restHub: 180,
+          restTree: 100,
+          restCross: 180,
+          gravity: 0.02,
+          damping: 0.86,
+          drift: 1,
+          maxV: 18,
+        },
+        opts || {}
+      );
+      this.w = 1000;
+      this.h = 700;
+      this.dragId = null;
+      this.dragPos = null;
+      this._build();
+    }
+
+    _build() {
+      const { nodes } = this.data;
+      const cx = this.w / 2;
+      const cy = this.h / 2;
+
+      const parent = {};
+      this.data.links.forEach(([a, b, t]) => {
+        if (t === "tree" && parent[b] === undefined) parent[b] = a;
+      });
+      const hubs = nodes.filter((n) => n.type === "hub");
+      const hubAngle = {};
+      hubs.forEach((h, i) => {
+        hubAngle[h.id] = (i / hubs.length) * Math.PI * 2 - Math.PI / 2;
+      });
+      const sibCount = {};
+      nodes.forEach((n) => {
+        if (n.type === "leaf") {
+          const p = parent[n.id];
+          sibCount[p] = (sibCount[p] || 0) + 1;
+        }
+      });
+      const seen = {};
+
+      this.nodes = nodes.map((n) => {
+        const isCenter = n.type === "center";
+        let x = cx, y = cy;
+        if (n.type === "hub") {
+          const a = hubAngle[n.id];
+          x = cx + Math.cos(a) * 185;
+          y = cy + Math.sin(a) * 185;
+        } else if (n.type === "leaf") {
+          const p = parent[n.id];
+          const base = hubAngle[p] != null ? hubAngle[p] : rand(0, Math.PI * 2);
+          seen[p] = (seen[p] || 0);
+          const k = seen[p]++;
+          const n2 = sibCount[p] || 1;
+          const spread = (k - (n2 - 1) / 2) * 0.5;
+          const a = base + spread;
+          x = cx + Math.cos(a) * 310 + rand(-10, 10);
+          y = cy + Math.sin(a) * 310 + rand(-10, 10);
+        }
+        return {
+          ref: n,
+          id: n.id,
+          x, y,
+          vx: 0, vy: 0,
+          mass: isCenter ? 7 : n.type === "hub" ? 2.4 : 1,
+          isCenter,
+          phase: rand(0, Math.PI * 2),
+          freq: rand(0.4, 0.9),
+        };
+      });
+      this.index = {};
+      this.nodes.forEach((n) => (this.index[n.id] = n));
+      this.t = 0;
+    }
+
+    setBounds(w, h) {
+      const ocx = this.w / 2, ocy = this.h / 2;
+      this.w = w; this.h = h;
+      const dx = w / 2 - ocx, dy = h / 2 - ocy;
+      this.nodes.forEach((n) => { n.x += dx; n.y += dy; });
+    }
+
+    grab(id) {
+      this.dragId = id;
+      const n = this.index[id];
+      this.dragPos = { x: n.x, y: n.y };
+    }
+    dragTo(x, y) {
+      if (this.dragPos) this.dragPos = { x, y };
+    }
+    release() {
+      this.dragId = null;
+      this.dragPos = null;
+    }
+
+    setParam(k, v) {
+      this.opts[k] = v;
+    }
+
+    tick(dt) {
+      const o = this.opts;
+      const cx = this.w / 2;
+      const cy = this.h / 2;
+      const N = this.nodes;
+      this.t += dt;
+
+      for (const n of N) { n.fx = 0; n.fy = 0; }
+
+      for (let i = 0; i < N.length; i++) {
+        const a = N[i];
+        for (let j = i + 1; j < N.length; j++) {
+          const b = N[j];
+          let dx = a.x - b.x;
+          let dy = a.y - b.y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 1) { d2 = 1; dx = rand(-1, 1); dy = rand(-1, 1); }
+          const d = Math.sqrt(d2);
+          const f = o.repulsion / d2;
+          const ux = dx / d, uy = dy / d;
+          a.fx += ux * f; a.fy += uy * f;
+          b.fx -= ux * f; b.fy -= uy * f;
+        }
+      }
+
+      for (const [s, t, type] of this.data.links) {
+        const a = this.index[s];
+        const b = this.index[t];
+        if (!a || !b) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const toCenter = a.isCenter || b.isCenter;
+        const rest = type === "cross" ? o.restCross : toCenter ? o.restHub : o.restTree;
+        const k = type === "cross" ? o.springCross : o.springTree;
+        const f = (d - rest) * k;
+        const ux = dx / d, uy = dy / d;
+        a.fx += ux * f; a.fy += uy * f;
+        b.fx -= ux * f; b.fy -= uy * f;
+      }
+
+      for (const n of N) {
+        n.fx += (cx - n.x) * o.gravity * (n.isCenter ? 6 : 1);
+        n.fy += (cy - n.y) * o.gravity * (n.isCenter ? 6 : 1);
+        if (!n.isCenter && o.drift > 0) {
+          n.fx += Math.cos(this.t * n.freq + n.phase) * 0.9 * o.drift;
+          n.fy += Math.sin(this.t * n.freq * 1.3 + n.phase) * 0.9 * o.drift;
+        }
+      }
+
+      for (const n of N) {
+        if (n.id === this.dragId && this.dragPos) {
+          n.x = this.dragPos.x; n.y = this.dragPos.y;
+          n.vx = 0; n.vy = 0;
+          continue;
+        }
+        n.vx = (n.vx + (n.fx / n.mass) * dt) * o.damping;
+        n.vy = (n.vy + (n.fy / n.mass) * dt) * o.damping;
+        const sp = Math.hypot(n.vx, n.vy);
+        if (sp > o.maxV) { n.vx = (n.vx / sp) * o.maxV; n.vy = (n.vy / sp) * o.maxV; }
+        n.x += n.vx * dt;
+        n.y += n.vy * dt;
+        const pad = 70;
+        if (n.x < pad) n.vx += (pad - n.x) * 0.04;
+        if (n.x > this.w - pad) n.vx -= (n.x - (this.w - pad)) * 0.04;
+        if (n.y < pad) n.vy += (pad - n.y) * 0.04;
+        if (n.y > this.h - pad) n.vy -= (n.y - (this.h - pad)) * 0.04;
+      }
+    }
+  }
+
+  window.Sim = Sim;
+})();
+    </script>
+
+    <!-- tweaks-panel.jsx -->
+    <script type="text/babel">
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;overflow-wrap:anywhere}
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  const dismiss = () => setOpen(false);
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 2147483645,
+          width: 36, height: 36, border: 0, borderRadius: 10,
+          background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)',
+          color: 'rgba(255,255,255,0.7)', fontSize: 16, cursor: 'pointer',
+          display: open ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}
+        title="Open tweaks"
+      >⚙</button>
+      {open && (
+        <div ref={dragRef} className="twk-panel"
+             style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+          <div className="twk-hd" onMouseDown={onDragStart}>
+            <b>{title}</b>
+            <button className="twk-x" aria-label="Close tweaks"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={dismiss}>✕</button>
+          </div>
+          <div className="twk-body">{children}</div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" style={{ width: 56, height: 22, border: '.5px solid rgba(0,0,0,.1)', borderRadius: 6, padding: 0, cursor: 'default', background: 'transparent' }}
+               value={value} onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>{sup.map((c, j) => <i key={j} style={{ background: c }} />)}</span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakColor,
+});
+    </script>
+
+    <!-- components.jsx -->
+    <script type="text/babel">
+const { useState, useRef, useEffect, useMemo, useCallback } = React;
+
+function colorFor(node, accent) {
+  return accent;
+}
+
+function radiusFor(type) {
+  return type === "center" ? 30 : type === "hub" ? 16 : 10.5;
+}
+
+function GraphView({ accent, tweaks, selectedId, onSelect }) {
+  const wrapRef = useRef(null);
+  const simRef = useRef(null);
+  const [, setTick] = useState(0);
+  const [dims, setDims] = useState({ w: 1000, h: 700 });
+  const [hovered, setHovered] = useState(null);
+  const dragState = useRef({ id: null, moved: false, sx: 0, sy: 0 });
+
+  if (!simRef.current) {
+    simRef.current = new window.Sim(window.GRAPH, {});
+  }
+
+  useEffect(() => {
+    simRef.current.setParam("drift", tweaks.floatSpeed);
+  }, [tweaks.floatSpeed]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setDims({ w: width, h: height });
+      simRef.current.setBounds(width, height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let raf;
+    let last = performance.now();
+    const loop = (now) => {
+      const dt = Math.min(2, (now - last) / 16.67);
+      last = now;
+      for (let i = 0; i < 2; i++) simRef.current.tick(dt / 2);
+      setTick((t) => (t + 1) % 1000000);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const sim = simRef.current;
+  const G = window.GRAPH;
+
+  const active = hovered || selectedId;
+  const neighborSet = useMemo(() => {
+    if (!active) return null;
+    const s = new Set(G.adj[active]);
+    s.add(active);
+    return s;
+  }, [active, G]);
+
+  const pt = (e) => {
+    const r = wrapRef.current.getBoundingClientRect();
+    const c = e.touches ? e.touches[0] : e;
+    return { x: c.clientX - r.left, y: c.clientY - r.top };
+  };
+  const onDown = (id) => (e) => {
+    e.preventDefault();
+    const p = pt(e);
+    dragState.current = { id, moved: false, sx: p.x, sy: p.y };
+    sim.grab(id);
+  };
+  useEffect(() => {
+    const move = (e) => {
+      const d = dragState.current;
+      if (!d.id) return;
+      const p = pt(e);
+      if (Math.hypot(p.x - d.sx, p.y - d.sy) > 4) d.moved = true;
+      sim.dragTo(p.x, p.y);
+    };
+    const up = () => {
+      const d = dragState.current;
+      if (d.id) {
+        if (!d.moved) onSelect(d.id === selectedId ? null : d.id);
+        sim.release();
+      }
+      dragState.current = { id: null, moved: false, sx: 0, sy: 0 };
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [selectedId, onSelect, sim]);
+
+  const sizeMul = tweaks.nodeSize;
+
+  return (
+    <div className="graph-wrap" ref={wrapRef}>
+      <svg
+        className="graph-svg skin-obsidian"
+        width={dims.w}
+        height={dims.h}
+        viewBox={`0 0 ${dims.w} ${dims.h}`}
+        onClick={(e) => { if (e.target.tagName === "svg") onSelect(null); }}
+      >
+
+        <g className="links">
+          {G.links.map(([s, t, type], i) => {
+            const a = sim.index[s];
+            const b = sim.index[t];
+            if (!a || !b) return null;
+            const touch = active && (s === active || t === active);
+            const dimmed = active && !touch;
+            const isCross = type === "cross";
+            return (
+              <line
+                key={i}
+                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                className={
+                  "link" +
+                  (isCross ? " link-cross" : "") +
+                  (touch ? " link-on" : "") +
+                  (dimmed ? " link-dim" : "")
+                }
+                stroke={touch ? accent : undefined}
+              />
+            );
+          })}
+        </g>
+
+        <g className="nodes">
+          {sim.nodes.map((n) => {
+            const node = n.ref;
+            const baseR = radiusFor(node.type) * sizeMul;
+            const isHover = hovered === n.id;
+            const isSel = selectedId === n.id;
+            const grow = isHover || isSel ? 1.34 : 1;
+            const r = baseR * grow;
+            const inFocus = !active || (neighborSet && neighborSet.has(n.id));
+            const dimmed = active && !inFocus;
+            const col = colorFor(node, accent);
+            const labelOpacity = dimmed
+              ? 0.1
+              : node.type === "leaf"
+              ? isHover || isSel || (neighborSet && neighborSet.has(n.id))
+                ? 1
+                : tweaks.labels === "hover"
+                ? 0
+                : 0.42
+              : active ? 0.95 : 0.92;
+            return (
+              <g
+                key={n.id}
+                transform={`translate(${n.x},${n.y})`}
+                className={"node-g" + (dimmed ? " dim" : "")}
+                onMouseEnter={() => setHovered(n.id)}
+                onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
+                onPointerDown={onDown(n.id)}
+                style={{ cursor: "pointer" }}
+              >
+                <circle
+                  r={r}
+                  className={"node-dot t-" + node.type + (isHover || isSel ? " on" : "")}
+                  fill={col}
+                  style={{ "--glow": col }}
+                />
+                {isSel && <circle r={r + 6} className="sel-ring" stroke={accent} />}
+                <text
+                  className={"node-label l-" + node.type}
+                  y={baseR * grow + (node.type === "center" ? 22 : 16)}
+                  style={{ opacity: labelOpacity }}
+                  textAnchor="middle"
+                >
+                  {node.label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function Panel({ id, onSelect, accent }) {
+  const node = useMemo(
+    () => (id ? window.GRAPH.nodes.find((n) => n.id === id) : null),
+    [id]
+  );
+  const neighbors = useMemo(() => {
+    if (!id) return [];
+    return [...window.GRAPH.adj[id]].map((nid) =>
+      window.GRAPH.nodes.find((n) => n.id === nid)
+    );
+  }, [id]);
+
+  const p = node && node.panel;
+  return (
+    <aside
+      className={"panel" + (id ? " open" : "")}
+      aria-hidden={!id}
+      style={{ transform: id ? "translate(0,0)" : undefined }}
+    >
+      {node && (
+        <div className="panel-inner" key={id}>
+          <button className="panel-close" onClick={() => onSelect(null)} aria-label="Close">
+            ×
+          </button>
+          {p.eyebrow && <div className="panel-eyebrow" style={{ color: accent }}>{p.eyebrow}</div>}
+          <h2 className="panel-title">{p.title}</h2>
+          {p.subtitle && <div className="panel-sub">{p.subtitle}</div>}
+          {p.meta && (
+            <div className="panel-meta">
+              {p.meta.map((m, i) => <span key={i} className="meta-chip">{m}</span>)}
+            </div>
+          )}
+          {p.body && <p className="panel-body">{p.body}</p>}
+          {p.bullets && (
+            <ul className="panel-bullets">
+              {p.bullets.map((b, i) => <li key={i}>{b}</li>)}
+            </ul>
+          )}
+          {p.tags && (
+            <div className="panel-tags">
+              {p.tags.map((t, i) => (
+                <span key={i} className="tag">#{t.toLowerCase().replace(/[^a-z0-9]+/g, "-")}</span>
+              ))}
+            </div>
+          )}
+          {p.links && (
+            <div className="panel-links">
+              {p.links.map((l, i) => (
+                <a key={i} href={l.href} target="_blank" rel="noreferrer" className="panel-link" style={{ color: accent }}>
+                  {l.label} <span className="arr">↗</span>
+                </a>
+              ))}
+            </div>
+          )}
+          {neighbors.length > 0 && (
+            <div className="linked">
+              <div className="linked-head">Linked notes · {neighbors.length}</div>
+              <div className="linked-list">
+                {neighbors.map((nb) => (
+                  <button key={nb.id} className="linked-chip" onClick={() => onSelect(nb.id)}>
+                    <span className="dot" style={{ background: colorFor(nb, accent) }} />
+                    {nb.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function TopBar() {
+  return (
+    <header className="topbar">
+      <div className="brand">
+        <svg width="22" height="22" viewBox="0 0 22 22" className="brand-glyph">
+          <line x1="11" y1="11" x2="4" y2="5" />
+          <line x1="11" y1="11" x2="18" y2="6" />
+          <line x1="11" y1="11" x2="6" y2="17" />
+          <circle cx="11" cy="11" r="3.4" className="bg-c" />
+          <circle cx="4" cy="5" r="2" />
+          <circle cx="18" cy="6" r="2" />
+          <circle cx="6" cy="17" r="2" />
+        </svg>
+        <span className="brand-name">grayson<span className="dim">.penland</span></span>
+      </div>
+    </header>
+  );
+}
+
+function StatusBar({ selectedId }) {
+  const n = window.GRAPH.nodes.length;
+  const l = window.GRAPH.links.length;
+  return (
+    <footer className="statusbar">
+      <span>{n} nodes · {l} links</span>
+      <span className="sep">/</span>
+      <span>{selectedId ? "viewing: " + selectedId : "drag to rearrange · click a node"}</span>
+    </footer>
+  );
+}
+
+Object.assign(window, { GraphView, Panel, TopBar, StatusBar });
+    </script>
+
+    <!-- app.jsx -->
+    <script type="text/babel">
+const { useState: useStateA } = React;
+
+const TWEAK_DEFAULTS = {
+  accent: "#e0823d",
+  dark: true,
+  floatSpeed: 1,
+  linkOpacity: 0.5,
+  nodeSize: 1,
+  labels: "always",
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [selectedId, setSelectedId] = useStateA(null);
+
+  const rootStyle = {
+    "--accent": t.accent,
+    "--link-op": t.linkOpacity,
+  };
+
+  return (
+    <div
+      className={"app theme-" + (t.dark ? "dark" : "light") + " skin-obsidian"}
+      style={rootStyle}
+    >
+      <TopBar />
+      <GraphView
+        accent={t.accent}
+        tweaks={t}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+      />
+      <Panel id={selectedId} onSelect={setSelectedId} accent={t.accent} />
+      <StatusBar selectedId={selectedId} />
+
+      <TweaksPanel>
+        <TweakSection label="Theme" />
+        <TweakColor
+          label="Accent"
+          value={t.accent}
+          options={["#e0823d", "#7c6cf0", "#3ba88f", "#4a9fe0", "#d94f6a"]}
+          onChange={(v) => setTweak("accent", v)}
+        />
+        <TweakToggle label="Dark canvas" value={t.dark} onChange={(v) => setTweak("dark", v)} />
+
+        <TweakSection label="Graph physics" />
+        <TweakSlider
+          label="Float speed"
+          value={t.floatSpeed}
+          min={0} max={2.5} step={0.1}
+          onChange={(v) => setTweak("floatSpeed", v)}
+        />
+        <TweakSlider
+          label="Node size"
+          value={t.nodeSize}
+          min={0.7} max={1.5} step={0.05}
+          onChange={(v) => setTweak("nodeSize", v)}
+        />
+        <TweakSlider
+          label="Link opacity"
+          value={t.linkOpacity}
+          min={0.1} max={1} step={0.05}
+          onChange={(v) => setTweak("linkOpacity", v)}
+        />
+
+        <TweakSection label="Labels" />
+        <TweakRadio
+          label="Leaf labels"
+          value={t.labels}
+          options={["always", "hover"]}
+          onChange={(v) => setTweak("labels", v)}
+        />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
