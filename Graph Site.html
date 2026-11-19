@@ -30,7 +30,7 @@
 
       /* ── themes ── */
       .theme-dark {
-        --bg: oklch(0.17 0.006 60);
+        --bg: #1c1e20;
         --bg2: oklch(0.115 0.006 60);
         --text: oklch(0.93 0.01 75);
         --muted: oklch(0.62 0.012 70);
@@ -57,7 +57,8 @@
       .graph-wrap {
         position: absolute;
         inset: 0;
-        background: radial-gradient(120% 120% at 50% 42%, var(--bg) 30%, var(--bg2) 100%);
+        background: --bg;
+        /* radial-gradient(120% 120% at 50% 42%, var(--bg) 30%, var(--bg2) 100%); */
         touch-action: none;
       }
       .graph-svg { display: block; }
@@ -79,6 +80,25 @@
       }
       .node-g.dim .node-dot { opacity: 0.16; }
       .node-g.dim { transition: opacity 0.25s; }
+      .node-g.leaf-hidden { opacity: 0.3; transition: opacity 0.25s ease; }
+      .link.leaf-link-hidden { opacity: 0.21 !important; transition: opacity 0.25s ease; }
+
+      /* ── load-in: nodes pop out of their parent, links fade in behind them ── */
+      @keyframes node-pop {
+        0%   { transform: scale(0);    opacity: 0; }
+        55%  { transform: scale(1.3);  opacity: 1; }
+        80%  { transform: scale(0.94); }
+        100% { transform: scale(1); }
+      }
+      .node-pop {
+        transform-origin: 0 0;
+        animation: node-pop 0.34s ease-out both;
+      }
+      @keyframes link-in { from { opacity: 0; } to { opacity: 1; } }
+      .link-in { animation: link-in 0.24s ease-out both; }
+      @media (prefers-reduced-motion: reduce) {
+        .node-pop, .link-in { animation: none; }
+      }
       .skin-obsidian .node-dot.t-center { filter: drop-shadow(0 0 11px var(--glow)); }
       .skin-obsidian .node-dot.t-hub { filter: drop-shadow(0 0 7px var(--glow)); }
       .skin-obsidian .node-dot.on { filter: drop-shadow(0 0 15px var(--glow)); }
@@ -107,9 +127,6 @@
         pointer-events: none;
       }
       .brand { display: flex; align-items: center; gap: 9px; pointer-events: auto; }
-      .brand-glyph line { stroke: var(--muted); stroke-width: 1.3; }
-      .brand-glyph circle { fill: var(--muted); }
-      .brand-glyph .bg-c { fill: var(--accent); }
       .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
       .brand-name .dim { color: var(--muted); font-weight: 500; }
 
@@ -134,8 +151,9 @@
       /* ── status bar ── */
       .statusbar {
         position: absolute;
-        left: 22px;
-        bottom: 16px;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
         z-index: 20;
         display: flex;
         gap: 8px;
@@ -144,8 +162,8 @@
         font-size: 11px;
         color: var(--muted);
         pointer-events: none;
+        white-space: nowrap;
       }
-      .statusbar .sep { opacity: 0.5; }
 
       /* ── side panel ── */
       .panel {
@@ -308,7 +326,7 @@
         .panel.open { box-shadow: 0 -24px 60px -30px rgb(0 0 0 / 0.6); }
         .panel-inner { padding: 26px 22px 40px; }
         .topbar { padding: 14px 16px; }
-        .statusbar { left: 16px; bottom: 12px; }
+        .statusbar { display: none; }
         .brand-name { font-size: 13px; }
       }
     </style>
@@ -319,8 +337,57 @@
     <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 
-    <script src="graph-data.js"></script>
+    <!-- Load graph data from YAML; fires "graphready" when window.GRAPH is set -->
+    <script>
+    (function () {
+      fetch('graph-data.yaml')
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          var data = jsyaml.load(text);
+          var knownIds = new Set(data.nodes.map(function (n) { return n.id; }));
+          var referencedIds = new Set();
+
+          // Infer links from node fields: children → tree, connects → cross
+          var links = [];
+          data.nodes.forEach(function (n) {
+            (n.children || []).forEach(function (childId) {
+              if (!knownIds.has(childId)) {
+                console.warn('[graph-data] "' + n.id + '" children includes unknown id "' + childId + '" — skipping');
+                return;
+              }
+              referencedIds.add(childId);
+              links.push([n.id, childId, 'tree']);
+            });
+            (n.connects || []).forEach(function (targetId) {
+              if (!knownIds.has(targetId)) {
+                console.warn('[graph-data] "' + n.id + '" connects includes unknown id "' + targetId + '" — skipping');
+                return;
+              }
+              referencedIds.add(targetId);
+              links.push([n.id, targetId, 'cross']);
+            });
+          });
+
+          // Warn about nodes that nothing links to (except the center node)
+          data.nodes.forEach(function (n) {
+            if (n.type !== 'center' && !referencedIds.has(n.id)) {
+              console.warn('[graph-data] node "' + n.id + '" (' + n.label + ') is not referenced by any children or connects — it will appear disconnected');
+            }
+          });
+
+          var adj = {};
+          data.nodes.forEach(function (n) { adj[n.id] = new Set(); });
+          links.forEach(function (l) { adj[l[0]].add(l[1]); adj[l[1]].add(l[0]); });
+          var degree = {};
+          data.nodes.forEach(function (n) { degree[n.id] = adj[n.id].size; });
+          window.GRAPH = { nodes: data.nodes, links: links, adj: adj, degree: degree };
+          window.dispatchEvent(new Event('graphready'));
+        })
+        .catch(function (err) { console.error('Failed to load graph-data.yaml:', err); });
+    })();
+    </script>
 
     <!-- physics.js -->
     <script>
@@ -409,6 +476,33 @@
       this.index = {};
       this.nodes.forEach((n) => (this.index[n.id] = n));
       this.t = 0;
+
+      // Load-in sequence: center, then hubs one by one, then each hub's leaves.
+      // Each node stays parked on its parent until its spawn time, then buds off
+      // toward its layout position.
+      const reduceMotion =
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const spawnMs = {};
+      const leafSeen = {};
+      let hubIdx = 0;
+      this.nodes.forEach((n) => {
+        if (n.ref.type === "center") spawnMs[n.id] = 0;
+        else if (n.ref.type === "hub") spawnMs[n.id] = 80 + hubIdx++ * 50;
+      });
+      this.nodes.forEach((n) => {
+        if (n.ref.type !== "leaf") return;
+        const p = parent[n.id];
+        const k = (leafSeen[p] = (leafSeen[p] || 0) + 1) - 1;
+        spawnMs[n.id] = (spawnMs[p] != null ? spawnMs[p] : 300) + 130 + k * 40;
+      });
+      this.nodes.forEach((n) => {
+        const p = this.index[parent[n.id]];
+        n.parent = p ? p.id : null;
+        n.dir = Math.atan2(n.y - (p ? p.y : cy), n.x - (p ? p.x : cx));
+        n.spawnMs = reduceMotion ? 0 : spawnMs[n.id] || 0;
+        n.spawnT = n.spawnMs / 16.67;
+        n.alive = n.spawnMs === 0;
+      });
     }
 
     setBounds(w, h) {
@@ -442,12 +536,25 @@
       const N = this.nodes;
       this.t += dt;
 
-      for (const n of N) { n.fx = 0; n.fy = 0; }
+      for (const n of N) {
+        n.fx = 0; n.fy = 0;
+        if (!n.alive && this.t >= n.spawnT) {
+          const p = this.index[n.parent];
+          const px = p ? p.x : cx, py = p ? p.y : cy;
+          n.alive = true;
+          n.x = px + Math.cos(n.dir) * 8;
+          n.y = py + Math.sin(n.dir) * 8;
+          n.vx = Math.cos(n.dir) * 6;
+          n.vy = Math.sin(n.dir) * 6;
+        }
+      }
 
       for (let i = 0; i < N.length; i++) {
         const a = N[i];
+        if (!a.alive) continue;
         for (let j = i + 1; j < N.length; j++) {
           const b = N[j];
+          if (!b.alive) continue;
           let dx = a.x - b.x;
           let dy = a.y - b.y;
           let d2 = dx * dx + dy * dy;
@@ -463,7 +570,7 @@
       for (const [s, t, type] of this.data.links) {
         const a = this.index[s];
         const b = this.index[t];
-        if (!a || !b) continue;
+        if (!a || !b || !a.alive || !b.alive) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
         const toCenter = a.isCenter || b.isCenter;
@@ -485,6 +592,13 @@
       }
 
       for (const n of N) {
+        if (!n.alive) {
+          // Not spawned yet: ride along on the parent so links/hit-boxes stay sane.
+          const p = this.index[n.parent];
+          n.x = p ? p.x : cx; n.y = p ? p.y : cy;
+          n.vx = 0; n.vy = 0;
+          continue;
+        }
         if (n.id === this.dragId && this.dragPos) {
           n.x = this.dragPos.x; n.y = this.dragPos.y;
           n.vx = 0; n.vy = 0;
@@ -530,6 +644,7 @@ function GraphView({ accent, selectedId, onSelect }) {
   const [, setTick] = useState(0);
   const [dims, setDims] = useState({ w: 1000, h: 700 });
   const [hovered, setHovered] = useState(null);
+  const hoverTimer = useRef(null);
   const dragState = useRef({ id: null, moved: false, sx: 0, sy: 0 });
 
   if (!simRef.current) {
@@ -627,18 +742,26 @@ function GraphView({ accent, selectedId, onSelect }) {
             const touch = active && (s === active || t === active);
             const dimmed = active && !touch;
             const isCross = type === "cross";
+            const eitherLeaf = a.ref.type === "leaf" || b.ref.type === "leaf";
+            const leafLinkHidden = !active && eitherLeaf;
             return (
-              <line
+              <g
                 key={i}
+                className="link-in"
+                style={{ animationDelay: Math.max(a.spawnMs, b.spawnMs) + 60 + "ms" }}
+              >
+              <line
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                 className={
                   "link" +
                   (isCross ? " link-cross" : "") +
                   (touch ? " link-on" : "") +
-                  (dimmed ? " link-dim" : "")
+                  (dimmed ? " link-dim" : "") +
+                  (leafLinkHidden ? " leaf-link-hidden" : "")
                 }
                 stroke={touch ? accent : undefined}
               />
+              </g>
             );
           })}
         </g>
@@ -653,6 +776,7 @@ function GraphView({ accent, selectedId, onSelect }) {
             const r = baseR * grow;
             const inFocus = !active || (neighborSet && neighborSet.has(n.id));
             const dimmed = active && !inFocus;
+            const leafHidden = node.type === "leaf" && !(neighborSet && neighborSet.has(n.id));
             const col = colorFor(node, accent);
             const labelOpacity = dimmed
               ? 0.1
@@ -665,12 +789,13 @@ function GraphView({ accent, selectedId, onSelect }) {
               <g
                 key={n.id}
                 transform={`translate(${n.x},${n.y})`}
-                className={"node-g" + (dimmed ? " dim" : "")}
-                onMouseEnter={() => setHovered(n.id)}
-                onMouseLeave={() => setHovered((h) => (h === n.id ? null : h))}
+                className={"node-g" + (dimmed ? " dim" : "") + (leafHidden ? " leaf-hidden" : "")}
+                onMouseEnter={() => { clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(() => setHovered(n.id), 200); }}
+                onMouseLeave={() => { clearTimeout(hoverTimer.current); setHovered((h) => (h === n.id ? null : h)); }}
                 onPointerDown={onDown(n.id)}
                 style={{ cursor: "pointer" }}
               >
+                <g className="node-pop" style={{ animationDelay: n.spawnMs + "ms" }}>
                 <circle
                   r={r}
                   className={"node-dot t-" + node.type + (isHover || isSel ? " on" : "")}
@@ -686,6 +811,7 @@ function GraphView({ accent, selectedId, onSelect }) {
                 >
                   {node.label}
                 </text>
+                </g>
               </g>
             );
           })}
@@ -772,16 +898,7 @@ function TopBar({ dark, setDark }) {
   return (
     <header className="topbar">
       <div className="brand">
-        <svg width="22" height="22" viewBox="0 0 22 22" className="brand-glyph">
-          <line x1="11" y1="11" x2="4" y2="5" />
-          <line x1="11" y1="11" x2="18" y2="6" />
-          <line x1="11" y1="11" x2="6" y2="17" />
-          <circle cx="11" cy="11" r="3.4" className="bg-c" />
-          <circle cx="4" cy="5" r="2" />
-          <circle cx="18" cy="6" r="2" />
-          <circle cx="6" cy="17" r="2" />
-        </svg>
-        <span className="brand-name">grayson<span className="dim">.penland</span></span>
+        <span className="brand-name">grayson<span className="dim">penland</span></span>
       </div>
       <button
         className="theme-toggle"
@@ -795,12 +912,8 @@ function TopBar({ dark, setDark }) {
 }
 
 function StatusBar({ selectedId }) {
-  const n = window.GRAPH.nodes.length;
-  const l = window.GRAPH.links.length;
   return (
     <footer className="statusbar">
-      <span>{n} nodes · {l} links</span>
-      <span className="sep">/</span>
       <span>{selectedId ? "viewing: " + selectedId : "drag to rearrange · click a node"}</span>
     </footer>
   );
@@ -836,7 +949,15 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+function mountApp() {
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+}
+
+if (window.GRAPH) {
+  mountApp();
+} else {
+  window.addEventListener('graphready', mountApp, { once: true });
+}
     </script>
   </body>
 </html>
