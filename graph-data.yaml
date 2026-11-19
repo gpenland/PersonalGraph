@@ -1,0 +1,303 @@
+# ═════════════════════════════════════════════════════════════════════════════
+# graph-data.yaml
+# Personal knowledge graph — all content for Graph Site.html
+#
+# This file is the single source of truth for everything visible on the graph.
+# Edit it to add, remove, or update nodes and connections. The site loads and
+# parses this file at runtime (via js-yaml); just save and refresh the browser.
+# The site must be served over HTTP (e.g. `python3 -m http.server 8080`) —
+# opening the HTML file directly won't work because fetch() is blocked on file://.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# GRAPH STRUCTURE
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The graph has three tiers:
+#
+#   center  — one node (me). Always visible, always centered.
+#   hub     — top-level category nodes (Education, Experience, etc.).
+#             Always visible. Listed under the center node's `children`.
+#   leaf    — detail nodes within a category (Georgia Tech, Sevalla, etc.).
+#             Hidden by default; fade in when their parent hub is hovered.
+#             Listed under their parent hub's `children`.
+#
+# Cross-branch connections (e.g. a project that uses a skill) are defined with
+# `connects` on the node that "owns" the relationship. They render as dashed
+# lines and don't imply hierarchy.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# NODE FIELDS
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#   id        Required. Unique key — referenced in `children` and `connects`.
+#             No spaces. Lowercase, short, memorable (e.g. "gt", "sevalla").
+#
+#   label     Required. Text shown on the graph bubble.
+#
+#   type      Required. One of: center | hub | leaf
+#
+#   group     Required. Controls the colour grouping of a node.
+#             For hubs: set group to their own id (e.g. id: edu, group: edu).
+#             For leaves: set group to their parent hub's id (e.g. group: edu).
+#             The center node uses group: core.
+#
+#   children  List of node ids to connect with solid tree links (hierarchy).
+#             Use on the center node to list hubs, and on hub nodes to list
+#             their leaves. Not used on leaf nodes.
+#
+#   connects  List of node ids to connect with dashed cross links (association).
+#             Use on any node to draw a relationship across branches.
+#             Only define a cross link once — it's bidirectional on hover.
+#
+#   panel     Optional but recommended. Content shown in the side panel when
+#             the node is clicked. All panel fields are optional:
+#
+#     eyebrow   Small label above the title (e.g. "education", "project").
+#     title     Main heading.
+#     subtitle  Secondary line beneath the title.
+#     meta      List of small chip tags — good for dates, locations, status.
+#               Example: ["Atlanta, GA", "Jun 2025 – Present"]
+#     body      A paragraph of prose. Use the YAML block scalar (>) for long
+#               text to avoid quoting issues — see existing nodes for examples.
+#     bullets   List of bullet-point strings. Rendered as a bulleted list.
+#     tags      List of short hashtag-style strings shown at the bottom.
+#     links     List of clickable links. Each item needs:
+#                 label: display text
+#                 href:  URL (use mailto: for email, tel: for phone)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW TO ADD A NEW NODE
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# 1. Pick a unique id (e.g. "internship2").
+# 2. Add the node entry anywhere under `nodes:`. Set type: leaf and
+#    group to its parent hub's id.
+# 3. Add that id to its parent hub's `children` list.
+# 4. Optionally add a `connects` list to link it to nodes in other branches.
+# 5. Save and refresh.
+#
+# To add a new top-level category, set type: hub, group to its own id,
+# and add its id to the center node's `children` list.
+#
+# ═════════════════════════════════════════════════════════════════════════════
+
+nodes:
+
+  # ── Center node ─────────────────────────────────────────────────────────────
+  - id: me
+    label: Grayson Penland
+    type: center
+    group: core
+    children: [edu, exp, proj, skills, contact]
+    panel:
+      eyebrow: home
+      title: Grayson Penland
+      subtitle: "CS @ Georgia Tech · GTM Intern @ Sevalla"
+      meta: ["Atlanta, GA"]
+      body: >
+        Computer science student with a background in IT, web, and open source.
+        Click any node to discover more.
+      links:
+        - label: Email
+          href: "mailto:gpenland06@gmail.com"
+        - label: LinkedIn
+          href: "https://linkedin.com/in/gpenland"
+        - label: GitHub
+          href: "https://github.com/gpenland"
+
+  # ── Hubs ────────────────────────────────────────────────────────────────────
+
+  - id: edu
+    label: Education
+    type: hub
+    group: edu
+    connects: [lang]
+    panel:
+      eyebrow: section
+      title: Georgia Institute of Technology
+      subtitle: "B.S. Computer Science · Concentrations in Cybersecurity, Information Internetworks"
+      meta: ["Atlanta, GA", "Jun 2025 – May 2028", "Expected Graduation: May 2028"]
+      bullets:
+        - "Relevant Coursework: Design & Analysis of Algorithms, Data Structures & Algorithms, Discrete Mathematics."
+        - "Activites: Lambda Chi Alpha"
+        - "Study Abroad @ Georgia Tech Europe Summer 2026"
+
+  - id: exp
+    label: Experience
+    type: hub
+    group: exp
+    children: [sevalla, vip, siervo]
+    panel:
+      eyebrow: section
+      title: Experience
+
+  - id: proj
+    label: Projects
+    type: hub
+    group: proj
+    children: [resumepress]
+    panel:
+      eyebrow: section
+      title: Projects
+
+  - id: skills
+    label: Skills
+    type: hub
+    group: skills
+    children: [lang, tools, infra]
+    panel:
+      eyebrow: section
+      title: Skills
+    
+  - id: contact
+    label: Contact
+    type: hub
+    group: contact
+    children: [linkedin, email, github]
+    panel:
+      eyebrow: section
+      title: Contact
+      subtitle: "Atlanta, GA"
+      links:
+        - label: "gpenland06@gmail.com"
+          href: "mailto:gpenland06@gmail.com"
+        - label: "linkedin.com/in/gpenland"
+          href: "https://linkedin.com/in/gpenland"
+        - label: "github.com/gpenland"
+          href: "https://github.com/gpenland"
+
+  # ── Experience ──────────────────────────────────────────────────────────────
+  - id: sevalla
+    label: Sevalla
+    type: leaf
+    group: exp
+    connects: [infra, lang]
+    panel:
+      eyebrow: experience
+      title: GTM Engineer Intern
+      subtitle: Sevalla (by Kinsta)
+      meta: ["Remote", "Aug 2026 – Present"]
+      bullets:
+        - "Built Python/SQL pipeline that segments thousands of users into recurring cohorts and syncs them to an outreach platform via REST API, replacing manual list pulls"
+        - "Documented and investigated 25+ first-deployment friction points and dashboard bugs in the first month, working with engineering on fixes"
+        - "Building production-grade demo applications showing Sevalla as an alternative to AWS, GCP, Azure, and Kubernetes, supporting developer evaluation and activation"
+      tags: [GTM engineering, Python, SQL, PaaS]
+
+  - id: vip
+    label: Analytics Research
+    type: leaf
+    group: exp
+    connects: [lang]
+    panel:
+      eyebrow: experience
+      title: Analytics Researcher
+      subtitle: "Vertically Integrated Project · Georgia Institute of Technology"
+      meta: ["Atlanta, GA", "Aug 2026 – Present"]
+      bullets:
+        - "Analyzing 23M+ daily fantasy sports rosters across 6 contest series and 95 contest-weeks of the 2020 NFL season, using pandas and pyarrow, to test whether contest structure changes participant risk-taking"
+        - "Wrote Python analyses comparing ROI and in-the-money rates of reused vs. non-reused rosters to separate reuse strategy from player selection"
+      tags: [Data analysis, pandas, Python]
+
+  - id: siervo
+    label: Siervocomp
+    type: leaf
+    group: exp
+    connects: [infra, lang, tools]
+    panel:
+      eyebrow: experience
+      title: IT Field Technician & Web Developer Contractor
+      subtitle: "Siervocomp Computer Repairs & IT Solutions"
+      meta: ["Toccoa, GA", "Jun 2023 – Jan 2025"]
+      body: Produced solutions and provided technical support for local businesses.
+      bullets:
+        - "Managed client communications & scheduling; delivered on-site service autonomously"
+        - "Wrote SOPs and user guides that reduced repeat issues"
+        - "Migrated host and optimized SEO for a 200-page site → ~4,000 monthly views"
+        - "Built & serviced 50+ PCs; diagnosed hardware / OS / network issues"
+      tags: [IT support, Web dev, SEO]
+
+  # ── Projects ────────────────────────────────────────────────────────────────
+
+  - id: resumepress
+    label: ResumePress
+    type: leaf
+    group: proj
+    connects: [tools, lang]
+    panel:
+      eyebrow: project
+      title: ResumePress
+      subtitle: "Multi-user job-search platform"
+      bullets:
+        - "Built and deployed a multi-user job-search platform (resume builder with application and contact tracking) with per-user data isolation, used to manage 100+ applications; exposed with an MCP server for agent connection"
+        - "Engineered a read-only Gmail sync with per-account rate limiting, exponential backoff, incremental scans, and background execution with stuck-run recovery, matching email threads to contacts and applications"
+        - "Integrated a probabilistic, non-generative model (Jev) to classify 500+ email threads as recruiting-related, match them to applications, and flag status changes; also powers a fallback for job-posting autofill"
+      tags: [Full-stack, MCP, Gmail API]
+      links:
+        - label: "GitHub: gpenland/ResumePress"
+          href: "https://github.com/gpenland/ResumePress"
+
+  # ── Skills ──────────────────────────────────────────────────────────────────
+  - id: lang
+    label: Languages
+    type: leaf
+    group: skills
+    panel:
+      eyebrow: skills
+      title: Languages
+      bullets: [Java, Python, Bash, HTML / CSS, SQL, PHP]
+
+  - id: tools
+    label: Developer Tools
+    type: leaf
+    group: skills
+    panel:
+      eyebrow: skills
+      title: Developer Tools
+      bullets: [Git, Docker, Ansible, Linux]
+
+  - id: infra
+    label: IT & Infrastructure
+    type: leaf
+    group: skills
+    panel:
+      eyebrow: skills
+      title: IT & Infrastructure
+      bullets:
+        - Networking fundamentals
+        - Hardware diagnostics
+        - System troubleshooting
+        - Technical documentation
+
+  # ── Contact ─────────────────────────────────────────────────────────────────
+  - id: linkedin
+    label: LinkedIn
+    type: leaf
+    group: contact
+    panel:
+      eyebrow: contact
+      title: LinkedIn
+      links:
+        - label: "linkedin.com/in/gpenland"
+          href: "https://linkedin.com/in/gpenland"
+
+  - id: email
+    label: Email
+    type: leaf
+    group: contact
+    panel:
+      eyebrow: contact
+      title: Email
+      links:
+        - label: "gpenland06@gmail.com"
+          href: "mailto:gpenland06@gmail.com"
+
+  - id: github
+    label: GitHub
+    type: leaf
+    group: contact
+    panel:
+      eyebrow: contact
+      title: GitHub
+      links:
+        - label: "github.com/gpenland"
+          href: "https://github.com/gpenland"
