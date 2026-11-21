@@ -378,11 +378,12 @@
           });
 
           var adj = {};
-          data.nodes.forEach(function (n) { adj[n.id] = new Set(); });
-          links.forEach(function (l) { adj[l[0]].add(l[1]); adj[l[1]].add(l[0]); });
+          var out = {};
+          data.nodes.forEach(function (n) { adj[n.id] = new Set(); out[n.id] = new Set(); });
+          links.forEach(function (l) { adj[l[0]].add(l[1]); adj[l[1]].add(l[0]); out[l[0]].add(l[1]); });
           var degree = {};
           data.nodes.forEach(function (n) { degree[n.id] = adj[n.id].size; });
-          window.GRAPH = { nodes: data.nodes, links: links, adj: adj, degree: degree };
+          window.GRAPH = { nodes: data.nodes, links: links, adj: adj, out: out, degree: degree };
           window.dispatchEvent(new Event('graphready'));
         })
         .catch(function (err) { console.error('Failed to load graph-data.yaml:', err); });
@@ -828,7 +829,7 @@ function Panel({ id, onSelect, accent }) {
   );
   const neighbors = useMemo(() => {
     if (!id) return [];
-    return [...window.GRAPH.adj[id]].map((nid) =>
+    return [...window.GRAPH.out[id]].map((nid) =>
       window.GRAPH.nodes.find((n) => n.id === nid)
     );
   }, [id]);
